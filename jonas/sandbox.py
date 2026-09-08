@@ -9,7 +9,7 @@ import numpy as np
 base = "/mnt/c/Users/pepaz/Downloads/ai_summer_school_dataset/ai_summer_school_dataset"
 path = base + "/train/09417.png"
 
-path = base + "/ground_truth_chars_balanced"
+path2 = base + "/ground_truth_chars_balanced"
 
 
 # %%
@@ -31,7 +31,7 @@ def show_image(image, cmap=None):
     if image.ndim == 3:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     plt.imshow(image, cmap=cmap)
-    # plt.axis("off")
+    plt.axis("off")
     plt.show()
 
 show_image(im)
@@ -47,7 +47,7 @@ fig, axes = plt.subplots(1, 3, figsize=(12, 3))
 for ax, channel, title in zip(axes, [blue, green, red], ["Blue", "Green", "Red"]):
     ax.imshow(channel, cmap="gray")
     ax.set_title(title)
-    ax.axis("off")
+    # ax.axis("off")
 plt.tight_layout()
 # %%
 gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
@@ -188,8 +188,6 @@ def load_class_images(file_paths):
             images.append(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
     return images
 
-# Load all class '0' images
-images = load_class_images(digit_files[1])
 # %%
 def compute_average_from_loaded(images, threshold_ratio=0.5):
     # Determine maximal dimensions
@@ -212,11 +210,21 @@ def compute_average_from_loaded(images, threshold_ratio=0.5):
 
     return avg_continuous, avg_binary
 
+output_dir = Path("average_images")
+output_dir.mkdir(parents=True, exist_ok=True)
 # %%
+number = 0
+images = load_class_images(digit_files[number])
 result = compute_average_from_loaded(images)
 avg_img = result[1]
-# %%
-show_image(avg_img)
+white_mask = (avg_img == 255).astype(np.uint8)
+contours, _ = cv2.findContours(white_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+largest_cnt = max(contours, key=cv2.contourArea)
+x, y, w, h = cv2.boundingRect(largest_cnt)
+cropped_img = avg_img[y:y+h, x:x+w]
+show_image(cropped_img, cmap="gray")
+save_path = output_dir / f"average_{number}.png"
+cv2.imwrite(str(save_path), cropped_img)
 # %%
 
 def compute_average_shape(file_paths, threshold_val=0.5):
@@ -261,3 +269,12 @@ def compute_average_shape(file_paths, threshold_val=0.5):
 
 avg_img = compute_average_shape(digit_files[0][:100])
 # %%
+
+test_images = ["06098.png",
+                "02197.png",
+                "03400.png",
+                "02988.png",
+                "03500.png",
+                "02699.png",
+
+               ]
