@@ -26,8 +26,9 @@ col_unique_counts = {
 print(col_unique_counts)
 
 # %%
-digit_position = 0
+digit_position = 1
 unique_values_and_counts = col_unique_counts[digit_position]
+unique_values_and_counts
 
 # %%
 vals, counts = np.unique(digit_matrix, return_counts=True)
