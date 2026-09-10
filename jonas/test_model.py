@@ -1,9 +1,11 @@
 # %%
+from time import time
+# %%
+t1 = time()
 from __future__ import annotations
 
 from pathlib import Path
 import cv2
-# %%
 import numpy as np
 import pandas as pd
 import torch
@@ -106,7 +108,6 @@ def digits_to_number(digits: list[int] | np.ndarray) -> int:
     return int(np.sum(np.array(digits) * DIVISORS))
 
 
-# %%
 # ============================================================
 # Load Model & Weights
 # ============================================================
@@ -125,7 +126,6 @@ else:
 model.to(DEVICE)
 model.eval()
 
-# %%
 # ============================================================
 # Run Inference on the Test Set
 # ============================================================
@@ -177,7 +177,6 @@ with torch.no_grad():
         })
         i+=1
 
-# %%
 # ============================================================
 # Evaluation Metrics & Per-Position Breakdown
 # ============================================================
@@ -194,9 +193,8 @@ else:
     print("=" * 50)
 
     # 2. Per-Position Digit Accuracy
-    true_mat = np.stack(results_df["true_digits"].values)  # shape: [N, 7]
-    pred_mat = np.stack(results_df["pred_digits"].values)  # shape: [N, 7]
-
+    true_mat = np.stack(results_df["true_digits"].values)
+    pred_mat = np.stack(results_df["pred_digits"].values)
     per_position_acc = (true_mat == pred_mat).mean(axis=0) * 100.0
 
     print("\nAccuracy by Digit Position (0 to 6):")
@@ -207,10 +205,21 @@ else:
     total_digit_acc = (true_mat == pred_mat).mean() * 100.0
     print(f"\nOverall Digit Accuracy     : {total_digit_acc:.2f}%")
 
-    # 4. Save predictions to CSV
+    # 4. Print all incorrectly classified image files
+    mismatches = results_df[~results_df["exact_match"]]
+    print(f"\n" + "-" * 50)
+    print(f"Incorrectly Classified Images ({len(mismatches)} total):")
+    print("-" * 50)
+    for _, r in mismatches.iterrows():
+        print(f"  File: {r['filename']:<20} | True: {r['true_number']} | Pred: {r['pred_number']}")
+
+    # 5. Save predictions to CSV
     output_predictions_path = BASE_DIR / "test_predictions.csv"
     results_df[["filename", "true_number", "pred_number", "exact_match"]].to_csv(
         output_predictions_path, sep=";", index=False
     )
     print(f"\nDetailed predictions saved to: {output_predictions_path}")
+
+t2 = time()
+print(t2-t1)
 # %%
