@@ -25,7 +25,7 @@ IMAGE_DIR = BASE_DIR / "test_augmented"
 
 # Path to your saved model weights (.pt or .pth file)
 # MODEL_CHECKPOINT_PATH = BASE_DIR / "best_model.pth"
-MODEL_CHECKPOINT_PATH = BASE_DIR / "aisummer" / "best_model.pt"
+MODEL_CHECKPOINT_PATH = Path.home() / "aisummer" / "aisummer" / "best_model.pt"
 
 # Model Architecture constants
 NUM_POSITIONS = 7
@@ -120,7 +120,7 @@ if MODEL_CHECKPOINT_PATH.exists():
     model.load_state_dict(state_dict)
     print(f"Loaded weights from {MODEL_CHECKPOINT_PATH}")
 else:
-    print(f"WARNING: Checkpoint {MODEL_CHECKPOINT_PATH} not found! Running with uninitialized model.")
+    raise Exception(f"Weights not found at {MODEL_CHECKPOINT_PATH}.")
 
 model.to(DEVICE)
 model.eval()
@@ -129,7 +129,7 @@ model.eval()
 # ============================================================
 # Run Inference on the Test Set
 # ============================================================
-NUM_SAMPLES = 2  # <-- Set to 3, 4, etc. Set to None to run on ALL pictures
+NUM_SAMPLES = None  # <-- Set to 3, 4, etc. Set to None to run on ALL pictures
 df = pd.read_csv(CSV_PATH, delimiter=";")
 if NUM_SAMPLES is not None:
     df = df.head(NUM_SAMPLES)
@@ -137,15 +137,17 @@ print(f"Running evaluation on {len(df)} images from {CSV_PATH}...")
 
 results = []
 
+i = 1
 with torch.no_grad():
     for _, row in df.iterrows():
+        print(f"\rIter {i}", end="")
         filename = str(row["filename"]).strip()
         true_num = int(row["number"])
         true_digits = number_to_digits(true_num)
 
         # Check in test_augmented
         img_path = IMAGE_DIR / filename
-        print(f"Current Image: {img_path}")
+        # print(f"Current Image: {img_path}")
 
         if not img_path.exists():
             print(f"Image not found: {filename}, skipping.")
@@ -158,7 +160,7 @@ with torch.no_grad():
 
         tensor = tensor.to(DEVICE)
         probs_list = predict(model, tensor)  # 7 tensors of shape [1, 10]
-        print(f"Prob lists: {probs_list}")
+        # print(f"Prob lists: {probs_list}")
 
         # Extract argmax digit for each of the 7 positions
         pred_digits = [int(p.argmax(dim=1).item()) for p in probs_list]
@@ -173,6 +175,7 @@ with torch.no_grad():
             "true_digits": true_digits,
             "pred_digits": pred_digits,
         })
+        i+=1
 
 # %%
 # ============================================================
