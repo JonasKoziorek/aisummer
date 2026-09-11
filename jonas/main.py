@@ -27,8 +27,6 @@ DEFAULT_CHECKPOINT = SCRIPT_DIR / "best_model.pt"
 NUM_POSITIONS = 7
 NUM_CLASSES = 10
 IMG_SIZE = (256, 256)
-IMAGE_EXTENSIONS = {".png", ".PNG"}
-BATCH_SIZE = 32
 
 # ============================================================
 # 2. Model Architecture
@@ -93,7 +91,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # ============================================================
-# 4. Main Evaluation Pipeline
+# 4. Main Sequential Evaluation Pipeline
 # ============================================================
 def main() -> None:
     args = parse_args()
@@ -123,7 +121,7 @@ def main() -> None:
     if not image_paths:
         raise ValueError(f"No PNG images found in {args.input_dir}")
 
-    print(f"Processing {len(image_paths)} PNG images...")
+    print(f"Processing {len(image_paths)} PNG images sequentially...")
 
     # Load Model
     model = SeqRecognizer(num_positions=NUM_POSITIONS, num_classes=NUM_CLASSES)
@@ -134,7 +132,7 @@ def main() -> None:
     model.to(device)
     model.eval()
 
-    # Pre-computed tensor for digit decoding
+    # Pre-computed tensor for digit decoding: [1000000, 100000, ..., 1]
     divisors_tensor = torch.tensor(
         10 ** np.arange(NUM_POSITIONS - 1, -1, -1),
         dtype=torch.int64,
@@ -144,72 +142,54 @@ def main() -> None:
     filenames: list[str] = []
     predicted_numbers: list[int] = []
 
-    # High performance inference loop
+    # Sequential image-by-image inference
     if device.type == "cuda":
         torch.cuda.synchronize()
     t_start = perf_counter()
 
-    batch_imgs: list[np.ndarray] = []
-    batch_names: list[str] = []
-
     with torch.inference_mode():
         for path in image_paths:
+            # 1. Load single image
             img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
             if img is None:
                 continue
 
+            # 2. Preprocess single image
             img = cv2.resize(img, IMG_SIZE, interpolation=cv2.INTER_AREA)
-            batch_imgs.append(img)
-            batch_names.append(path.name)
 
-            if len(batch_imgs) == BATCH_SIZE:
-                tensor_batch = (
-                    torch.from_numpy(np.stack(batch_imgs))
-                    .unsqueeze(1)
-                    .float()
-                    .div_(255.0)
-                    .to(device, non_blocking=True)
-                )
-                logits = model(tensor_batch)
-                stacked_logits = torch.stack(logits, dim=1)
-                pred_digits = stacked_logits.argmax(dim=2)
-                pred_nums = (pred_digits * divisors_tensor).sum(dim=1).tolist()
-
-                filenames.extend(batch_names)
-                predicted_numbers.extend(pred_nums)
-
-                batch_imgs.clear()
-                batch_names.clear()
-
-        # Remaining partial batch
-        if batch_imgs:
-            tensor_batch = (
-                torch.from_numpy(np.stack(batch_imgs))
-                .unsqueeze(1)
+            # Convert to tensor: [1, 1, H, W] normalized to [0, 1]
+            tensor = (
+                torch.from_numpy(img)
+                .unsqueeze(0)
+                .unsqueeze(0)
                 .float()
                 .div_(255.0)
                 .to(device, non_blocking=True)
             )
-            logits = model(tensor_batch)
-            stacked_logits = torch.stack(logits, dim=1)
-            pred_digits = stacked_logits.argmax(dim=2)
-            pred_nums = (pred_digits * divisors_tensor).sum(dim=1).tolist()
 
-            filenames.extend(batch_names)
-            predicted_numbers.extend(pred_nums)
+            # 3. Model forward pass on single image
+            logits = model(tensor)                 # 7 x [1, 10]
+            stacked_logits = torch.stack(logits, dim=1)  # [1, 7, 10]
+            pred_digits = stacked_logits.argmax(dim=2)   # [1, 7]
+
+            # Reconstruct 7-digit integer
+            pred_num = int((pred_digits * divisors_tensor).sum().item())
+
+            filenames.append(path.name)
+            predicted_numbers.append(pred_num)
 
     if device.type == "cuda":
         torch.cuda.synchronize()
     total_time = perf_counter() - t_start
 
-    # Save to CSV using ';' delimiter
+    # 4. Save results to CSV using ';' delimiter
     df_out = pd.DataFrame({
         "filename": filenames,
         "number": predicted_numbers,
     })
     df_out.to_csv(output_csv_path, sep=";", index=False)
 
-    print(f"Successfully processed {len(filenames)} images in {total_time:.3f} s ({len(filenames)/total_time:.1f} FPS)")
+    print(f"Successfully processed {len(filenames)} images sequentially in {total_time:.3f} s ({len(filenames)/total_time:.1f} FPS)")
     print(f"Saved results to: {output_csv_path}")
 
 
